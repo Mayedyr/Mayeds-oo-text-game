@@ -199,6 +199,7 @@ def text(*sentence):
     for seg in sentence:
         for char in seg:
             print(char, end = "", flush = True)
+            sleep(0.01)
     print("")
 
 def fightstats(player, opponent):
@@ -206,7 +207,7 @@ def fightstats(player, opponent):
     print("Your health: ", player.health, "/", player.MAXHEALTH)
     print("Your mana: ", player.mana, "/", player.MAXMANA)
     print("")
-    print("Opponents health: ", opponent.health)
+    print("Opponents health: ", opponent.health, "/", opponent.MAXHEALTH)
     print("\n")
 
 def fightintro(player, opponent):
