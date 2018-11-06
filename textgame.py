@@ -1,6 +1,5 @@
 from random import randint
 from os import system
-from winsound import *
 from time import sleep
 
 class Character():
@@ -9,6 +8,7 @@ class Character():
         self.school = school
 
         self.MAXHEALTH = race.gethealth()
+        self.MAXMANA = race.getmana()
         self.health = race.gethealth()
         self.accuracy = race.getaccuracy()
         self.strength = race.getstrength()
@@ -199,15 +199,12 @@ def text(*sentence):
     for seg in sentence:
         for char in seg:
             print(char, end = "", flush = True)
-            if(char != " "):
-                Beep(600, 40)
-                sleep(0.01)
     print("")
 
 def fightstats(player, opponent):
     system("cls")
-    print("Your health: ", player.health)
-    print("Your mana: ", player.mana)
+    print("Your health: ", player.health, "/", player.MAXHEALTH)
+    print("Your mana: ", player.mana, "/", player.MAXMANA)
     print("")
     print("Opponents health: ", opponent.health)
     print("\n")
@@ -304,7 +301,6 @@ def charactercreate():
     character = {"race": race, "school": school}
     return(character)
 
-PlaySound("C:\Projects\OOGame\Bonetrousle.wav",SND_ASYNC)
 
 character = charactercreate()
 pc = Player(character["race"], character["school"])
