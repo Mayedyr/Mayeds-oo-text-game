@@ -1,310 +1,260 @@
-from random import randint
-from os import system
-from time import sleep
+from __future__ import annotations
 
-class Character():
-    def __init__(self, race, school):
-        self.race = race
-        self.school = school
+import random
+import sys
+import time
+from dataclasses import dataclass, field
+from typing import Callable, Mapping, TypeVar
 
-        self.MAXHEALTH = race.gethealth()
-        self.MAXMANA = race.getmana()
-        self.health = race.gethealth()
-        self.accuracy = race.getaccuracy()
-        self.strength = race.getstrength()
-        self.mana = race.getmana()
-        self.armor = school.getarmor()
-        self.skills = school.getskills()
 
-    def changehealth(self, amount):
-        self.health += amount
+HEAL_AMOUNT = 20
+LIGHTNING_DAMAGE = 22
+SEPARATOR = "-------------------------------"
 
-    def changemana(self, amount):
-        self.mana += amount
+
+@dataclass(frozen=True)
+class Race:
+    name: str
+    health: int
+    accuracy: int
+    strength: int
+    mana: int
+
+
+@dataclass(frozen=True)
+class Skill:
+    name: str
+    mana_cost: int
+    effect: Callable[[Character, Character], str]
+
+    def use(self, caster: Character, target: Character) -> str:
+        """Apply the effect when the caster can pay its mana cost."""
+        if caster.mana < self.mana_cost:
+            return f"Not enough mana to use {self.name.lower()}!"
+
+        caster.change_mana(-self.mana_cost)
+        return self.effect(caster, target)
+
+
+@dataclass(frozen=True)
+class School:
+    name: str
+    armor: int
+    skills: tuple[Skill, ...]
+
+
+@dataclass
+class Character:
+    race: Race
+    school: School
+    health: int = field(init=False)
+    mana: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.health = self.max_health
+        self.mana = self.max_mana
+
+    @property
+    def max_health(self) -> int:
+        return self.race.health
+
+    @property
+    def max_mana(self) -> int:
+        return self.race.mana
+
+    def change_health(self, amount: int) -> int:
+        """Keep health within its limits and return the applied change."""
+        previous_health = self.health
+        self.health = max(0, min(self.max_health, self.health + amount))
+        return self.health - previous_health
+
+    def change_mana(self, amount: int) -> None:
+        self.mana = max(0, min(self.max_mana, self.mana + amount))
 
 
 class Player(Character):
-    pass
+    """The character controlled by the player."""
 
 
 class Enemy(Character):
-    pass
+    """A computer-controlled opponent."""
 
 
-class Race():
-    def __init__(self):
-        self._health = 0
-        self._accuracy = 0
-        self._strength = 0
-        self._mana = 0
+def basic_attack(caster: Character, target: Character) -> str:
+    attack_roll = caster.race.accuracy + random.randint(-2, 3)
+    damage = caster.race.strength + random.randint(-2, 3)
+    possessive, subject = (
+        ("Your", "You") if isinstance(caster, Player) else ("Their", "They")
+    )
 
-    def gethealth(self):
-        return (self.health)
+    if attack_roll <= target.school.armor:
+        return f"{possessive} attack missed!"
 
-    def getaccuracy(self):
-        return (self.accuracy)
-
-    def getstrength(self):
-        return (self.strength)
-
-    def getmana(self):
-        return (self.mana)
+    target.change_health(-damage)
+    return f"{possessive} attack hit! {subject} dealt {damage} damage!"
 
 
-class School():
-    def __init__(self):
-        self._armor = 0
-        self._skills = {}
-
-    def getarmor(self):
-        return(self.armor)
-
-    def getskills(self):
-        return(self.skills)
-
-    def basicattack(self, cast, targ):
-        attackroll = cast.accuracy + randint(-2, 3)
-        damage = cast.strength + randint(-2, 3)
-
-        if(isinstance(cast, Player)):
-            noun1 = "Your"
-            noun2 = "You"
-        else:
-            noun1 = "Their"
-            noun2 = "They"
-
-        if(attackroll > targ.armor):
-            targ.changehealth(-1 * damage)
-            system("cls")
-            print("")
-
-            text(noun1, " attack...  hit! ", noun2, " dealt ", str(damage), " damage!")
-            text("-------------------------------")
-        else:
-            system("cls")
-            print("")
-            text(noun1, " attack...  missed!")
-            text("-------------------------------")
+def heal(caster: Character, _target: Character) -> str:
+    healed = caster.change_health(HEAL_AMOUNT)
+    subject = "You" if isinstance(caster, Player) else "They"
+    return f"{subject} healed {healed} health points!"
 
 
-class Orc(Race):
-    health = 80
-    accuracy = 10
-    strength = 14
-    mana = 0
-    def __init__(self):
-        self.health = 80
-        self.accuracy = 10
-        self.strength = 14
-        self.mana = 0
+def lightning(caster: Character, target: Character) -> str:
+    damage = LIGHTNING_DAMAGE + random.randint(-4, 5)
+    target.change_health(-damage)
+    subject = "You" if isinstance(caster, Player) else "They"
+    return f"{subject} dealt {damage} lightning damage!"
 
 
-class Elf(Race):
-    health = 60
-    accuracy = 14
-    strength = 6
-    mana = 100
-    def __init__(self):
-        self.health = 60
-        self.accuracy = 14
-        self.strength = 6
-        self.mana = 100
+# Immutable configuration is shared; health and mana belong to each character.
+ELF = Race(name="Elf", health=60, accuracy=14, strength=6, mana=100)
+DWARF = Race(name="Dwarf", health=70, accuracy=12, strength=10, mana=40)
+ORC = Race(name="Orc", health=80, accuracy=10, strength=14, mana=0)
+
+BASIC_ATTACK = Skill(name="Basic attack", mana_cost=0, effect=basic_attack)
+WARRIOR_HEAL = Skill(name="Heal", mana_cost=20, effect=heal)
+WIZARD_HEAL = Skill(name="Heal", mana_cost=10, effect=heal)
+LIGHTNING = Skill(name="Lightning", mana_cost=30, effect=lightning)
+
+TUSKRIDER = School(name="Tuskrider", armor=11, skills=(BASIC_ATTACK,))
+WARRIOR = School(
+    name="Warrior", armor=11, skills=(BASIC_ATTACK, WARRIOR_HEAL)
+)
+WIZARD = School(
+    name="Wizard", armor=9, skills=(BASIC_ATTACK, WIZARD_HEAL, LIGHTNING)
+)
+
+RACES = {race.name: race for race in (ELF, DWARF)}
+SCHOOLS = {school.name: school for school in (WARRIOR, WIZARD)}
 
 
-class Dwarf(Race):
-    health = 70
-    accuracy = 12
-    strength = 10
-    mana = 40
-    def __init__(self):
-        self.health = 70
-        self.accuracy = 12
-        self.strength = 10
-        self.mana = 40
+def clear_screen() -> None:
+    """Clear interactive terminals without starting a shell command."""
+    if sys.stdout.isatty():
+        print("\033[2J\033[H", end="", flush=True)
 
 
-class Tuskrider(School):
-    armor = 11
-    def __init__(self):
-        self.armor = 11
-        self.skills = {1: "basicattack (0)"}
+def display_text(message: str) -> None:
+    """Animate text in terminals; print immediately for redirected output."""
+    if not sys.stdout.isatty():
+        print(message)
+        return
+
+    time.sleep(0.5)
+    for character in message:
+        print(character, end="", flush=True)
+        time.sleep(0.01)
+    print()
 
 
-class Warrior(School):
-    armor = 11
-    def __init__(self):
-        self.armor = 11
-        self.skills = {1: "basicattack (0)", 2: "heal (20)"}
-
-    def heal(self, cast):
-        heal = cast.MAXHEALTH - cast.health
-        if(heal > 20):
-            heal = 20
-        if(cast.mana >= 20):
-            cast.changehealth(heal)
-            cast.changemana(-20)
-            system("cls")
-            print("")
-            text("You healed ", str(heal), " health points!")
-            text("-------------------------------")
-        else:
-            system("cls")
-            print("")
-            text("You did not have enough mana to heal!")
-            text("-------------------------------")
+def show_message(message: str) -> None:
+    clear_screen()
+    print()
+    display_text(message)
+    display_text(SEPARATOR)
 
 
-class Wizard(School):
-    armor = 9
-    def __init__(self):
-        self.armor = 9
-        self.skills = {1: "basicattack (0)", 2: "heal (10)", 3: "lightning (30)"}
-
-    def heal(self, cast):
-        heal = cast.MAXHEALTH - cast.health
-        if(heal > 20):
-            heal = 20
-        if(cast.mana >= 10):
-            cast.changehealth(heal)
-            cast.changemana(-10)
-            system("cls")
-            print("")
-            text("You healed ", str(heal), " health points!")
-            text("-------------------------------")
-        else:
-            system("cls")
-            print("")
-            text("You did not have enough mana to heal!")
-            text("-------------------------------")
-
-    def lightning(self, cast, targ):
-        damage = 22 + randint(-4, 5)
-
-        if(cast.mana >= 30):
-            targ.changehealth(-1 * damage)
-            cast.changemana(-30)
-            system("cls")
-            print("")
-            text("Your attack...  hit! You dealt ", str(damage), " damage!")
-            text("-------------------------------")
-        else:
-            system("cls")
-            print("")
-            text("Your attack...  failed! You did not have enough mana!")
-            text("-------------------------------")
+Option = TypeVar("Option")
 
 
-def text(*sentence):
-    sleep(0.5)
-    for seg in sentence:
-        for char in seg:
-            print(char, end = "", flush = True)
-            sleep(0.01)
-    print("")
+def choose_option(
+    prompt: str,
+    options: Mapping[str, Option],
+    describe: Callable[[Option], str],
+) -> Option:
+    """Select an available option by its number or name."""
+    while True:
+        clear_screen()
+        for number, (name, option) in enumerate(options.items(), start=1):
+            print(f"{number} - {name}\n{describe(option)}\n")
 
-def fightstats(player, opponent):
-    system("cls")
-    print("Your health: ", player.health, "/", player.MAXHEALTH)
-    print("Your mana: ", player.mana, "/", player.MAXMANA)
-    print("")
-    print("Opponents health: ", opponent.health, "/", opponent.MAXHEALTH)
-    print("\n")
+        choice = input(f"{prompt}\n > ").strip().casefold()
+        for number, (name, option) in enumerate(options.items(), start=1):
+            if choice in (str(number), name.casefold()):
+                return option
 
-def fightintro(player, opponent):
-    system("cls")
-    opponentrace = opponent.race.__class__.__name__
-    opponentschool = opponent.school.__class__.__name__
-    print("")
-    text("     PREPARE TO FIGHT!")
-    text("An ", opponentrace, " ", opponentschool, " has appeared!")
-    text("-------------------------------")
+        display_text("Invalid selection. Enter an available number or name.")
 
-def skillselect(player, opponent):
-    while(True):
-        fightstats(player, opponent)
-        print(player.skills)
-        text("Input number to select skill")
-        skill = input(" > ")
-        try:
-            if(skill == "1"):
-                player.school.basicattack(player, opponent)
-                break
-            elif(skill == "2"):
-                player.school.heal(player)
-                break
-            elif(skill == "3"):
-                player.school.lightning(player, opponent)
-                break
-            else:
-                system("cls")
-                print("")
-                print("        invalid input")
-                text("-------------------------------")
-        except:
-            system("cls")
-            print("")
-            print("        invalid input")
-            text("-------------------------------")
 
-def fight(player, opponent):
-    fightintro(player, opponent)
-    while(player.health > 0 and opponent.health > 0):
-        skillselect(player, opponent)
-        if(opponent.health <= 0):
-            system("cls")
-            print("")
-            text("YES BOI U WIN")
-            text("!!!!!!!!!!!!!")
+def describe_race(race: Race) -> str:
+    return (
+        f"  Health: {race.health}\n"
+        f"  Accuracy: {race.accuracy}\n"
+        f"  Strength: {race.strength}\n"
+        f"  Mana: {race.mana}"
+    )
+
+
+def describe_school(school: School) -> str:
+    skills = ", ".join(
+        f"{skill.name} ({skill.mana_cost} mana)" for skill in school.skills
+    )
+    return f"  Armor: {school.armor}\n  Skills: {skills}"
+
+
+def create_character() -> Player:
+    race = choose_option("Select your race:", RACES, describe_race)
+    school = choose_option("Select your school:", SCHOOLS, describe_school)
+    return Player(race, school)
+
+
+def show_fight_stats(player: Player, opponent: Enemy) -> None:
+    clear_screen()
+    print(f"Your health: {player.health}/{player.max_health}")
+    print(f"Your mana: {player.mana}/{player.max_mana}\n")
+    print(f"Opponent's health: {opponent.health}/{opponent.max_health}\n")
+
+
+def select_skill(player: Player, opponent: Enemy) -> None:
+    """Take one turn; insufficient mana still consumes the turn."""
+    while True:
+        show_fight_stats(player, opponent)
+        skills = player.school.skills
+        for number, skill in enumerate(skills, start=1):
+            print(f"{number} - {skill.name} ({skill.mana_cost} mana)")
+
+        choice = input("\nSelect a skill:\n > ").strip()
+        available_skills = {
+            str(number): skill
+            for number, skill in enumerate(skills, start=1)
+        }
+        skill = available_skills.get(choice)
+        if skill is None:
+            display_text("Invalid selection. Enter an available skill number.")
+            continue
+
+        show_message(skill.use(player, opponent))
+        return
+
+
+def fight(player: Player, opponent: Enemy) -> None:
+    show_message(
+        f"PREPARE TO FIGHT!\n"
+        f"An {opponent.race.name} {opponent.school.name} has appeared!"
+    )
+
+    while player.health > 0 and opponent.health > 0:
+        select_skill(player, opponent)
+        if opponent.health == 0:
             break
-        opponent.school.basicattack(opponent, player)
-    if(opponent.health > 0):
-        system("cls")
-        text("...")
-        text("...")
-        text("im dissapointed...")
-        text("...")
 
-def charactercreate():
-    system("cls")
-    while(True):
-        text("\n 1 - Elf:\n   health: ", str(Elf.health), "\n   accuracy: ", str(Elf.accuracy),
-        "\n   strength: ", str(Elf.strength),"\n   mana: ", str(Elf.mana),
-        "\n 2 - Dwarf:\n   health: ", str(Dwarf.health), "\n   accuracy: ", str(Dwarf.accuracy),
-        "\n   strength: ", str(Dwarf.strength),"\n   mana: ", str(Dwarf.mana),
-        "\n\n Input number to select race")
-        race = input(" > ")
-        if(race == "1" or race.upper() == "ELF"):
-            race = Elf()
-            break
-        elif(race == "2" or race.upper() == "DWARF"):
-            race = Dwarf()
-            break
-        else:
-            system("cls")
-            print("Invalid input")
+        show_message(BASIC_ATTACK.use(opponent, player))
 
-    system("cls")
-    while(True):
-        text("\n 1 - Warrior:\n   armor: ", str(Warrior.armor), "\n   skills: heal"
-             "\n 2 - Wizard:\n   armor: ", str(Wizard.armor), "\n   skills: heal, lightning"
-             "\n\n Input number to select school")
-        school = input(" > ")
-        if(school == "1"):
-            school = Warrior()
-            break
-        elif(school == "2"):
-            school = Wizard()
-            break
-        else:
-            system("cls")
-            print("Invalid input")
-
-    character = {"race": race, "school": school}
-    return(character)
+    if player.health > 0:
+        show_message("You win!")
+    else:
+        show_message("You were defeated.")
 
 
-character = charactercreate()
-pc = Player(character["race"], character["school"])
-npc = Enemy(Orc(), Tuskrider())
+def main() -> None:
+    player = create_character()
+    opponent = Enemy(ORC, TUSKRIDER)
+    fight(player, opponent)
 
-fight(pc, npc)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (EOFError, KeyboardInterrupt):
+        print("\nGame closed.")
